@@ -14,8 +14,11 @@ Every error in this document was encountered during real development of this lib
 6. [/dev/kfd missing — GPU not visible to WSL2](#devkfd-missing--gpu-not-visible-to-wsl2)
 7. [torch.cuda.is_available() returns False on ROCm build](#torchcudais_available-returns-false-on-rocm-build)
 8. [DirectML not available / torch_directml ImportError](#directml-not-available--torch_directml-importerror)
-9. [Wrong WSL distro — Python not found](#wrong-wsl-distro--python-not-found)
-10. [git index.lock error on NTFS mount](#git-indexlock-error-on-ntfs-mount)
+9. [torch-directml not detected / falling back to CPU](#torch-directml-not-detected--falling-back-to-cpu)
+10. [Device shows as privateuseone:0 instead of dml:0](#device-shows-as-privateuseone0-instead-of-dml0)
+11. [Whisper always runs on CPU even with AMD GPU](#whisper-always-runs-on-cpu-even-with-amd-gpu)
+12. [Wrong WSL distro — Python not found](#wrong-wsl-distro--python-not-found)
+13. [git index.lock error on NTFS mount](#git-indexlock-error-on-ntfs-mount)
 
 ---
 
@@ -226,6 +229,90 @@ If this raises an error about incompatible torch versions, reinstall torch first
 pip install torch==2.3.0 --index-url https://download.pytorch.org/whl/cpu
 pip install torch-directml
 ```
+
+---
+
+## torch-directml not detected / falling back to CPU
+
+**Symptom:** `get_best_device()` returns `"cpu"` on Windows even with an AMD GPU, or `python -m torch_amd_setup` shows `best_device: cpu`.
+
+**Check 1 — Python version (CRITICAL):**
+```bash
+python --version
+# If output shows 3.12 or higher: torch-directml is not supported on Python 3.12+
+# Solution: Create a separate Python 3.11 venv
+py -3.11 -m venv .venv311
+.venv311\Scripts\activate
+```
+
+**Check 2 — Is torch-directml installed?**
+```bash
+pip show torch-directml
+# Not found → pip install torch-directml
+```
+
+**Check 3 — Correct installation order (important)**
+Install `torch-directml` directly without installing torch first. DirectML will pull the correct torch version automatically:
+```bash
+# WRONG: installs incompatible torch versions
+pip install torch==2.3.0
+pip install torch-directml
+
+# CORRECT: let DirectML pull torch 2.4.1
+pip install torch-directml
+```
+
+**Check 4 — Verify DirectML is working:**
+```python
+import torch_directml
+print(torch_directml.is_available())      # Should be True
+print(torch_directml.device_name(0))      # Should show your GPU name
+```
+
+---
+
+## Device shows as privateuseone:0 instead of dml:0
+
+**Symptom:** `str(device)` or printing `get_torch_device()` shows `privateuseone:0` instead of the expected `dml:0`.
+
+**This is normal for DirectML.** The device string `privateuseone:0` indicates DirectML is working correctly — it's PyTorch's internal representation for custom GPU backends. The GPU acceleration is active regardless of the device string name.
+
+**How to use it:**
+```python
+from torch_amd_setup import get_torch_device
+import torch
+
+device = get_torch_device()
+print(str(device))  # Prints: privateuseone:0
+
+# This works correctly — your model will use DirectML acceleration
+model = MyModel().to(device)
+```
+
+If you need the GPU name for logging, use this instead:
+```python
+import torch_directml
+gpu_name = torch_directml.device_name(0)  # Returns: "AMD Radeon RX 5700 XT"
+```
+
+---
+
+## Whisper always runs on CPU even with AMD GPU
+
+**Symptom:** Using faster-whisper or OpenAI Whisper on Windows with AMD GPU, but GPU is never used — inference stays on CPU.
+
+**Root cause:** CTranslate2 (the backend used by faster-whisper) does not support DirectML. Even if you have an AMD GPU and DirectML installed, Whisper must run on CPU.
+
+**This is a known limitation** with no workaround on Windows DirectML.
+
+**Workaround — Use WSL2 + ROCm instead:**
+If you need GPU-accelerated Whisper on Windows with AMD, use WSL2 + ROCm:
+1. Set up WSL2 with Ubuntu 22.04 and ROCm 6.1 (see [Tutorial](tutorial.md#windows--path-b-wsl2--rocm-best-quality))
+2. Install faster-whisper in WSL2 — it will automatically use ROCm/GPU
+3. Call the WSL2 venv from Windows if needed via a wrapper script
+
+**Workaround — Reduce model size for CPU:**
+If CPU inference is acceptable, use the `base` or `tiny` Whisper model instead of `large` to reduce inference time.
 
 ---
 

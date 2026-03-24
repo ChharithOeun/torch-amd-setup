@@ -1,5 +1,66 @@
 # Lessons Learned: Building AMD ROCm + PyTorch Support from Scratch
 
+---
+
+## Session 2: 2026-03-23 — DirectML Benchmarking & Windows-Specific Lessons
+
+**Context:** Real-world benchmarking of DirectML on AMD RX 5700 XT. Discovered critical Windows-only limitations and compatibility issues.
+
+**Hardware:** AMD Radeon RX 5700 XT, Windows 11, Python 3.11.9.
+
+### Key Discoveries
+
+**1. Python 3.14 breaks torch-directml — must use Python 3.11**
+
+`torch-directml` is compiled against Python 3.11 ABI and does not support 3.12+. On Windows, you must maintain a separate Python 3.11 venv for any DirectML work. Always check `py -3.11 --version` first. This is a hard ceiling, not a soft requirement.
+
+**Workaround:** Create `.venv311` and keep it isolated. If your main project uses 3.12+, accept that DirectML is unavailable and use WSL2 + ROCm instead.
+
+**2. torch-directml 0.2.5 requires torch 2.4.1 — install DirectML first, not torch**
+
+Critical ordering mistake found during testing: Installing torch 2.3.0 first, then torch-directml, causes version conflicts. DirectML depends on torch 2.4.1, and pip's dependency resolver doesn't handle this gracefully.
+
+**Correct approach:** Install torch-directml directly without pre-installing torch. Let it pull torch 2.4.1 automatically.
+
+```bash
+# WRONG (causes version hell)
+pip install torch==2.3.0 --index-url https://download.pytorch.org/whl/cpu
+pip install torch-directml  # Pulls torch 2.4.1, conflicts with 2.3.0
+
+# RIGHT (clean resolution)
+pip install torch-directml  # Pulls torch 2.4.1 automatically
+```
+
+**3. DirectML device shows as `privateuseone:0`, not `dml:0`**
+
+This was confusing at first because the diagnostics CLI has special-case logic to detect DirectML. When you call `str(device)`, PyTorch shows `privateuseone:0` for DirectML. This is expected and normal — it's PyTorch's way of representing custom backend devices. The GPU acceleration is working correctly.
+
+For logging and debugging, use `torch_directml.device_name(0)` instead to get the human-readable GPU name.
+
+**4. CTranslate2 (faster-whisper backend) does NOT support DirectML — Whisper stays on CPU**
+
+This is a hard architectural limitation. CTranslate2, the C++ library that powers faster-whisper, only supports CUDA, ROCm, and CPU backends. It has zero DirectML support.
+
+**Consequence:** On Windows with DirectML, Whisper inference runs entirely on CPU, completely negating GPU acceleration for speech-to-text workloads. This is a showstopper for audio pipeline projects on Windows DirectML.
+
+**Only solution:** Use WSL2 + ROCm for GPU-accelerated Whisper on Windows AMD. There is no Windows DirectML path for Whisper.
+
+**5. Ollama on Windows doesn't respect OLLAMA_MODELS env var if set after the parent process starts**
+
+Tested with Ollama desktop app. Even if you set `OLLAMA_MODELS=/d/ollama_models` before launching, if the parent process (the Ollama GUI or service) started before the env var was set, Ollama will still use the default C:\Users\User\.ollama location.
+
+**Workaround:** Use directory junctions instead of env vars. This forces Ollama to use the new location regardless of when env vars were set:
+
+```powershell
+mklink /J C:\Users\User\.ollama D:\ollama_models
+```
+
+This works because the filesystem junction is real to the OS, not dependent on environment variables.
+
+---
+
+## Session 1: 2026-03-23 — Original Extraction & WSL2 Setup
+
 **Date:** 2026-03-23
 **Context:** Extracting `torch-amd-setup` from a private AI audio pipeline project.
 **Hardware:** AMD Radeon RX 5700 XT (gfx1010 / Navi 10), Windows 11, WSL2 Ubuntu 22.04.

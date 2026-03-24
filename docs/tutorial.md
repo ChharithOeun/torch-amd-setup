@@ -50,15 +50,16 @@ py -3.11 -m venv .venv311
 .venv311\Scripts\activate
 ```
 
-### Step 2 — Install PyTorch (CPU wheel) and DirectML
+### Step 2 — Install torch-directml (let it pull torch)
+
+**IMPORTANT: Install torch-directml DIRECTLY. Do NOT install torch first.**
 
 ```bash
-pip install torch==2.3.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 pip install torch-directml
 pip install torch-amd-setup
 ```
 
-We use the CPU PyTorch wheel because `torch-directml` patches it to use the GPU — you don't need the CUDA or ROCm build.
+Let torch-directml pull the correct torch version (2.4.1) automatically. If you install torch first, you may get version conflicts.
 
 ### Step 3 — Verify
 
@@ -68,11 +69,22 @@ python -m torch_amd_setup
 
 You should see `best_device: dml` and your GPU name in `dml_device_name`.
 
+**Detailed verification:**
+
 ```python
 import torch_directml
 print(torch_directml.is_available())          # True
 print(torch_directml.device_name(0))          # AMD Radeon RX 5700 XT
 ```
+
+**Command-line verification:**
+
+```bash
+python -c "import torch_directml; print(torch_directml.device_name(0))"
+# Should show your GPU name, e.g.: AMD Radeon RX 5700 XT
+```
+
+If `device_name(0)` returns a name instead of an error, DirectML is working correctly.
 
 ### Important DirectML note on float16
 

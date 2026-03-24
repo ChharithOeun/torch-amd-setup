@@ -91,6 +91,31 @@ Output:
 
 ---
 
+## Benchmarks
+
+Real-world performance on **AMD Radeon RX 5700 XT** via DirectML (Windows 11, Python 3.11.9, torch 2.4.1, torch-directml 0.2.5):
+
+| Device                          | Runtime  | TFLOPS   | Speedup |
+|---------------------------------|----------|----------|---------|
+| CPU (float32, AMD Ryzen 7)     | 250.4 ms | 0.55     | 1.0×    |
+| AMD DirectML (float32, RX 5700 XT) | 6.2 ms   | 22.04    | **40.2× faster** |
+
+**Key findings:**
+- DirectML provides **40× speedup** over CPU for float32 workloads
+- Device detection reports as `privateuseone:0` (not `dml:0`) — this is expected and normal
+- Float16 support is unreliable on DirectML; float32 is the safe default
+
+---
+
+## Known Limitations
+
+1. **DirectML float32-only** — No float16 support on DirectML. Models using float16 are automatically downcast to float32, which uses ~1.5× more VRAM.
+2. **Python 3.11 requirement for DirectML** — `torch-directml` does not support Python 3.12 or later. Use a Python 3.11 venv if using DirectML on Windows.
+3. **Whisper/CTranslate2 incompatibility** — CTranslate2 (the backend for faster-whisper) does not support DirectML. Whisper inference must run on CPU even with DirectML available. For GPU-accelerated Whisper on AMD, use ROCm on Linux/WSL2.
+4. **GPU memory overhead** — DirectML uses roughly 1.5× more VRAM than ROCm for the same model due to float32-only execution and driver overhead.
+
+---
+
 ## API Reference
 
 ### `get_best_device() → str`

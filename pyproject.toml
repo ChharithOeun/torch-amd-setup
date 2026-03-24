@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "torch-amd-setup"
+version = "0.1.0"
+description = "Auto-detects the best PyTorch compute device for AMD GPUs, with gfx1010 ROCm override support (RX 5700 XT, RX 5600 XT, Navi 10)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+keywords = [
+    "pytorch", "amd", "rocm", "directml", "gpu", "rx5700xt",
+    "gfx1010", "navi10", "machine-learning", "device-detection"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# torch is intentionally NOT a hard dependency — users must install the
+# correct variant (CPU / CUDA / ROCm) for their hardware themselves.
+dependencies = []
+
+[project.optional-dependencies]
+# Install the appropriate torch variant for your hardware:
+#
+#   pip install torch-amd-setup[rocm]       # AMD GPU on Linux / WSL2
+#   pip install torch-amd-setup[directml]   # AMD GPU on Windows (Python ≤3.11)
+#   pip install torch-amd-setup[cuda]       # NVIDIA GPU
+#   pip install torch-amd-setup[cpu]        # No GPU
+#
+rocm = [
+    "torch>=2.2.0",
+    "torchvision",
+    "torchaudio",
+]
+directml = [
+    "torch==2.3.0",
+    "torch-directml",
+]
+cuda = [
+    "torch>=2.2.0",
+    "torchvision",
+    "torchaudio",
+]
+cpu = [
+    "torch>=2.2.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+
+[project.urls]
+Homepage = "https://github.com/ChharithOeun/torch-amd-setup"
+Repository = "https://github.com/ChharithOeun/torch-amd-setup"
+Issues = "https://github.com/ChharithOeun/torch-amd-setup/issues"
+Documentation = "https://github.com/ChharithOeun/torch-amd-setup/tree/main/docs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["torch_amd_setup"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true

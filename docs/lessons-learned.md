@@ -2,6 +2,74 @@
 
 ---
 
+## Session 3: 2026-03-23 — diffusers + DirectML: The Device String Trap
+
+**Context:** First real production use of DirectML with a full diffusers SDXL pipeline (Stable Diffusion XL image generation). Benchmark proved the GPU was active at 40.2x CPU speed. Production pipeline ran on CPU anyway. Root cause took ~30 min to identify.
+
+**Hardware:** AMD Radeon RX 5700 XT, Windows 11, Python 3.11.9, torch-directml.
+
+---
+
+### The Bug
+
+A diffusers `StableDiffusionXLPipeline` was loading the SDXL model and calling:
+
+```python
+device_name = str(torch_directml.device())  # "privateuseone:0"
+pipe = pipe.to(device_name)
+```
+
+The pipeline silently fell back to CPU. The device badge in the UI showed `cpu`. Images took 10–15 minutes per panel instead of seconds. No error was raised. No warning was printed.
+
+### Why the Benchmark Masked the Problem
+
+The GPU benchmark (`benchmark_gpu.py`) used:
+```python
+device = torch_directml.device()          # actual object
+x = torch.randn(4096, 4096).to(device)   # works fine
+```
+
+This passed the **device object** directly. The benchmark passed. GPU was confirmed at 40.2x speedup. But production code extracted the string with `str()` and passed that instead. The two code paths looked similar but behaved completely differently.
+
+### Root Cause
+
+The diffusers pipeline's `.to(device)` method iterates all sub-modules (UNet, VAE, text encoders). When `device` is the string `"privateuseone:0"`, PyTorch's device parsing fails internally. diffusers catches the exception in a try/except, falls back to CPU, and logs nothing visible.
+
+This is NOT a bug in diffusers or torch-directml — it's a documentation gap. The PyTorch `tensor.to(string)` overload supports common string devices like `"cuda:0"`, `"cpu"`, `"mps"`. Custom backends accessed via the `privateuseone` namespace are not parseable from strings.
+
+### The Fix
+
+Store and use the device **object**, never the string, for `.to()` calls:
+
+```python
+dml_device = torch_directml.device()   # object
+pipe = pipe.to(dml_device)             # works
+
+# Also: Generator must use "cpu" device — DirectML doesn't support Generator on device
+generator = torch.Generator(device="cpu")
+```
+
+Three lines changed in `_detect_device()` and `_load_pipeline()`. The function now returns a 3-tuple `(name_str, dtype, device_obj)` so callers always have the object available without needing to re-instantiate it.
+
+### What to Always Remember About DirectML + diffusers
+
+1. **Never pass `str(dml_device)` to `.to()`** — only the object works for pipelines
+2. **Use `variant="fp16"` only on CUDA/ROCm** — DirectML requires float32 throughout
+3. **`torch.Generator` must be on `"cpu"`** — DirectML doesn't support device-side generators
+4. **Verify with `pipe.unet.device`** — should show `privateuseone:0` after loading
+5. **Benchmark != production** — simple tensor ops work with the string; full pipelines don't
+
+### How to Detect This Failure Without Waiting 10 Minutes
+
+After loading a pipeline, immediately check:
+```python
+print(pipe.unet.device)   # "cpu" = broken, "privateuseone:0" = working
+```
+
+Add this check to any startup health monitor so silent CPU fallback is caught immediately.
+
+---
+
 ## Session 2: 2026-03-23 — DirectML Benchmarking & Windows-Specific Lessons
 
 **Context:** Real-world benchmarking of DirectML on AMD RX 5700 XT. Discovered critical Windows-only limitations and compatibility issues.

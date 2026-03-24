@@ -16,9 +16,10 @@ Every error in this document was encountered during real development of this lib
 8. [DirectML not available / torch_directml ImportError](#directml-not-available--torch_directml-importerror)
 9. [torch-directml not detected / falling back to CPU](#torch-directml-not-detected--falling-back-to-cpu)
 10. [Device shows as privateuseone:0 instead of dml:0](#device-shows-as-privateuseone0-instead-of-dml0)
-11. [Whisper always runs on CPU even with AMD GPU](#whisper-always-runs-on-cpu-even-with-amd-gpu)
-12. [Wrong WSL distro — Python not found](#wrong-wsl-distro--python-not-found)
-13. [git index.lock error on NTFS mount](#git-indexlock-error-on-ntfs-mount)
+11. [diffusers pipeline silently runs on CPU with DirectML (device string vs object)](#diffusers-pipeline-silently-runs-on-cpu-with-directml-device-string-vs-object)
+12. [Whisper always runs on CPU even with AMD GPU](#whisper-always-runs-on-cpu-even-with-amd-gpu)
+13. [Wrong WSL distro — Python not found](#wrong-wsl-distro--python-not-found)
+14. [git index.lock error on NTFS mount](#git-indexlock-error-on-ntfs-mount)
 
 ---
 
@@ -294,6 +295,80 @@ If you need the GPU name for logging, use this instead:
 import torch_directml
 gpu_name = torch_directml.device_name(0)  # Returns: "AMD Radeon RX 5700 XT"
 ```
+
+---
+
+## diffusers pipeline silently runs on CPU with DirectML (device string vs object)
+
+**Symptom:** DirectML is working (benchmark confirms GPU acceleration, `torch_directml.is_available()` returns `True`), but a diffusers pipeline (`StableDiffusionXLPipeline`, `StableDiffusionPipeline`, etc.) generates images on CPU — taking 5–15 minutes per image instead of seconds. The device badge or log shows `cpu` even though DirectML detection succeeded.
+
+**Root cause:** Passing the DirectML device as a **string** to `pipe.to()` silently fails. The diffusers pipeline iterates all sub-components (UNet, VAE, text encoders) and calls `.to(device)` on each. When `device` is the string `"privateuseone:0"`, PyTorch cannot parse it as a valid device, raises an internal exception, and the pipeline falls back to CPU. Because the exception is caught internally and no warning is printed, the failure is completely invisible.
+
+The critical distinction:
+```python
+# WRONG — string form, fails silently inside diffusers
+device_str = str(torch_directml.device())  # "privateuseone:0"
+pipe = pipe.to(device_str)                 # silently runs on CPU
+
+# CORRECT — device object, works
+device_obj = torch_directml.device()      # keep the actual object
+pipe = pipe.to(device_obj)                # runs on GPU
+```
+
+**Why it's hard to catch:** Benchmarks using simple tensor ops work fine with the string form. `torch.randn(n, n).to("privateuseone:0")` succeeds. Only a full pipeline `.to()` that iterates all sub-components exposes this failure. If you proved your GPU works with a matmul benchmark but your diffusion pipeline is still on CPU, this is the reason.
+
+**Complete working pattern for DirectML + diffusers:**
+
+```python
+import torch
+import torch_directml
+from diffusers import StableDiffusionXLPipeline
+
+# Step 1: get device OBJECT (not string)
+dml_device = torch_directml.device()
+print(f"DirectML device: {dml_device}")       # privateuseone:0
+print(f"GPU name: {torch_directml.device_name(0)}")  # AMD Radeon RX 5700 XT
+
+# Step 2: load with float32 — DirectML does not support float16
+pipe = StableDiffusionXLPipeline.from_pretrained(
+    "stabilityai/stable-diffusion-xl-base-1.0",
+    torch_dtype=torch.float32,   # NOT float16
+    use_safetensors=True,
+    # Do NOT pass variant="fp16" — that variant uses fp16 weights
+)
+pipe.enable_attention_slicing()  # reduces VRAM usage
+
+# Step 3: move pipeline using the OBJECT
+pipe = pipe.to(dml_device)
+
+# Step 4: verify GPU is active
+print(pipe.unet.device)   # should print: privateuseone:0
+
+# Step 5: use cpu Generator — DirectML doesn't support Generator on device
+generator = torch.Generator(device="cpu")
+generator.manual_seed(42)
+
+result = pipe(
+    prompt="a photo of an astronaut riding a horse",
+    generator=generator,
+    num_inference_steps=25,
+)
+result.images[0].save("output.png")
+```
+
+**In torch-amd-setup:** `get_torch_device()` returns the device object directly, so it's always safe to use with `.to()`. The issue only appears when you call `str()` on the returned device and then pass that string to `.to()`:
+
+```python
+from torch_amd_setup import get_torch_device
+
+device = get_torch_device()     # SAFE — returns device object
+pipe = pipe.to(device)          # works correctly
+
+# Don't do this:
+pipe = pipe.to(str(device))     # FAILS silently — passes "privateuseone:0" string
+```
+
+**Expected performance after fix:** On AMD RX 5700 XT, SDXL at 25 steps drops from ~10 minutes (CPU) to ~2–4 minutes (DirectML, float32). For float16 speeds, use WSL2 + ROCm.
 
 ---
 

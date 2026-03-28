@@ -45,7 +45,38 @@ export HSA_OVERRIDE_GFX_VERSION=10.3.0
 
 ## Install
 
+### Quick install (one-click)
+
 ```bash
+# Linux / macOS
+bash install.sh            # auto-detects ROCm / CUDA / CPU
+bash install.sh --rocm     # AMD GPU (Linux)
+bash install.sh --cuda     # NVIDIA GPU
+bash install.sh --cpu      # CPU only
+bash install.sh --check    # verify environment only
+```
+
+```bat
+REM Windows
+install.bat                REM DirectML — requires Python 3.11
+install.bat --cpu          REM CPU only — any Python version
+install.bat --cuda         REM NVIDIA CUDA
+install.bat --check        REM verify environment only
+```
+
+### Manual install
+
+```bash
+# 1. Install torch for your hardware (pick one):
+pip install torch --index-url https://download.pytorch.org/whl/rocm6.1   # AMD ROCm (Linux)
+pip install torch --index-url https://download.pytorch.org/whl/cu121     # NVIDIA CUDA
+pip install torch --index-url https://download.pytorch.org/whl/cpu       # CPU only
+pip install torch                                                          # macOS MPS / CUDA
+
+# Windows DirectML (Python 3.11 only — hard ceiling):
+pip install torch-directml    # pulls torch 2.4.1 automatically — do NOT pre-install torch
+
+# 2. Install torch-amd-setup:
 pip install torch-amd-setup
 ```
 
@@ -165,6 +196,109 @@ If your card isn't listed, check `GFX_OVERRIDE_MAP` in `detect.py` and open a PR
 | Python version limit | 3.11 max           | Any                |
 | GPU memory usage     | ~1.5× higher       | Native             |
 | Best for             | Quick experiments  | Production workloads |
+
+---
+
+## Troubleshooting
+
+### Windows
+
+**torch-directml import fails / wrong torch version**
+Install directml *without* pre-installing torch. It pulls the correct torch 2.4.1 automatically:
+```bat
+pip uninstall torch -y
+pip install torch-directml
+```
+
+**Python 3.12+ — torch-directml not available**
+DirectML requires Python ≤ 3.11. Create a 3.11 venv:
+```bat
+py -3.11 -m venv .venv311
+.venv311\Scripts\activate
+pip install torch-directml torch-amd-setup
+```
+
+**`get_best_device()` returns "cpu" on Windows with AMD GPU**
+DirectML was not detected. Check: `python -m torch_amd_setup` — if DML is missing, install it:
+```bat
+pip install torch-directml
+```
+
+**`privateuseone:0` device string**
+Normal and expected. This is how PyTorch represents DirectML custom backends.
+
+**Whisper stays on CPU even with GPU available**
+CTranslate2 (faster-whisper backend) has no DirectML support — this is a hard architectural limit. For GPU-accelerated Whisper on AMD, use WSL2 + ROCm.
+
+---
+
+### Linux (ROCm)
+
+**`torch.cuda.is_available()` returns False**
+You likely installed the CPU torch wheel. Check:
+```bash
+python3 -c "import torch; print(torch.__version__)"
+# Should show: 2.x.x+rocm6.1 (not +cpu)
+```
+If it shows `+cpu`, reinstall:
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/rocm6.1
+```
+
+**RX 5700 XT not detected / falls back to CPU**
+The gfx1010 override is missing. Add to `~/.bashrc`:
+```bash
+export HSA_OVERRIDE_GFX_VERSION=10.3.0
+```
+Or set it in your Python script *before* importing torch:
+```python
+import os
+os.environ["HSA_OVERRIDE_GFX_VERSION"] = "10.3.0"
+import torch  # now picks up the override
+```
+`torch-amd-setup` does this automatically — just call `get_best_device()` first.
+
+**`rocminfo` shows version 5.0.0 and fails**
+Ubuntu ships a stub `rocminfo`. Remove it before installing ROCm:
+```bash
+sudo apt remove rocminfo
+```
+
+**`/dev/kfd: Permission denied`**
+```bash
+sudo usermod -aG render,video $USER
+# Log out and back in
+```
+
+**`set -e` + script exits silently**
+If using `grep` inside a `set -e` script and grep finds no match (exit code 1), the script dies silently. Use `grep ... || true` to avoid this.
+
+**numpy 2.x ABI break**
+torch ≤ 2.4 requires numpy <2.0:
+```bash
+pip install "numpy<2.0"
+```
+
+---
+
+### macOS
+
+**MPS not available**
+Requires macOS 12.3+ with Apple Silicon (M1/M2/M3). Intel Macs do not have MPS — use CPU.
+```bash
+python3 -c "import platform; print(platform.mac_ver())"
+```
+
+---
+
+### All Platforms
+
+**Verify your setup at any time:**
+```bash
+python -m torch_amd_setup        # full diagnostics
+bash install.sh --check          # Linux/macOS
+install.bat --check              # Windows
+```
 
 ---
 

@@ -14,13 +14,11 @@ and by GitHub Actions on every push to `main`.
 
 ---
 
-## [Unreleased]
+## [Unreleased] — updated 2026-03-29
 
-_In progress:_
-- ROCm Linux / WSL2 benchmark suite (counterpart to Windows DirectML results)
-- Verified Whisper/CTranslate2 CPU fallback timing on RX 5700 XT
+### Changed
+- Add neon banner (`0e99f9c`)
 
----
 
 ## [0.3.0] — 2026-03-23
 

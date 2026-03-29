@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/banner.png" alt="Torch AMD Setup Banner" width="100%"></p>
+
 # torch-amd-setup
 
 **Auto-detects the best PyTorch compute device for AMD GPUs** — with first-class support for cards that are not in ROCm's default allow-list (RX 5700 XT, RX 5600 XT, RX 5500 XT / gfx1010–gfx1012).

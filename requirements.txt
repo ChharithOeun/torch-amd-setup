@@ -1,0 +1,8 @@
+# torch-amd-setup requirements
+# WARNING: Do NOT install regular torch with CUDA (e.g., torch-cu118)
+# torch-directml provides its own PyTorch build optimized for DirectML
+
+torch-directml>=1.13.0
+diffusers>=0.21.0
+transformers>=4.30.0
+accelerate>=0.20.0

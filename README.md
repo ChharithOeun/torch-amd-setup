@@ -337,3 +337,11 @@ MIT — see [LICENSE](LICENSE).
 This package was extracted from a private AI music pipeline project. The gfx1010 ROCm workaround was discovered the hard way — through several hours of cascading PyTorch installs, ROCm SDK conflicts, and dependency hell. The goal is that nobody else has to spend that time.
 
 See [docs/lessons-learned.md](docs/lessons-learned.md) for the full story.
+
+---
+
+## Support This Work
+
+If this saved you time, consider buying me a coffee:
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-chharcop-yellow)](https://buymeacoffee.com/chharcop)

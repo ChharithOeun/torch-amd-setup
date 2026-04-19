@@ -17,7 +17,7 @@ and by GitHub Actions on every push to `main`.
 ## [Unreleased] -- updated 2026-04-19
 
 ### Changed
-- add Buy Me A Coffee link to README (`877042d`)
+- ci: add CI workflow for main (`af1fa9e`)
 
 
 ## [0.3.0] — 2026-03-23

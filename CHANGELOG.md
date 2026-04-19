@@ -16,8 +16,8 @@ and by GitHub Actions on every push to `main`.
 
 ## [Unreleased] -- updated 2026-04-19
 
-### Changed
-- ci: add CI workflow for main (`af1fa9e`)
+### Fixed
+- correct Buy Me a Coffee link to buymeacoffee.com/chharith (`1c8a7b7`)
 
 
 ## [0.3.0] — 2026-03-23

@@ -344,4 +344,4 @@ See [docs/lessons-learned.md](docs/lessons-learned.md) for the full story.
 
 If this saved you time, consider buying me a coffee:
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-chharcop-yellow)](https://buymeacoffee.com/chharcop)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-chharcop-yellow)](https://buymeacoffee.com/chharith)

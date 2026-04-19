@@ -2,60 +2,65 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
+    name: Lint & Validate
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Verify Python version
-      run: python --version
+      - name: Check Python syntax with AST parse
+        run: python -c "import ast, pathlib, sys; errors = []; [errors.append(str(f)) for f in pathlib.Path('scripts').glob('*.py') if not __import__('functools').reduce(lambda a,b: a, [ast.parse(f.read_text(encoding='utf-8'))] or [None]) is None or True]; print(str(len(list(pathlib.Path('scripts').glob('*.py')))) + ' scripts OK')"
 
-    - name: Check Python syntax with AST parse
-      run: |
-        python -c "import ast, pathlib, sys; errors = []; [errors.append(str(f)) for f in pathlib.Path('scripts').glob('*.py') if not (lambda: (ast.parse(f.read_text()), True)[1])()]; sys.exit(len(errors))"
+      - name: Validate YAML files
+        run: |
+          python -c "
+          import sys, subprocess, pathlib
+          try:
+              import yaml
+          except ImportError:
+              subprocess.run([sys.executable, '-m', 'pip', 'install', 'pyyaml', '-q'], check=True)
+              import yaml
+          files = list(pathlib.Path('.github').glob('**/*.yml'))
+          [yaml.safe_load(f.read_text(encoding='utf-8')) for f in files]
+          print(str(len(files)) + ' YAML files OK')
+          "
 
-    - name: Validate YAML files
-      run: |
-        python -c "import yaml, pathlib; [yaml.safe_load(f.read_text()) for f in pathlib.Path('.github').glob('**/*.yml')]"
+      - name: Show requirements
+        run: python -c "import pathlib; print(pathlib.Path('requirements.txt').read_text())"
 
-    - name: Check requirements.txt
-      run: |
-        cat requirements.txt
-
-    - name: List scripts
-      run: |
-        python -c "import pathlib; [print(f) for f in pathlib.Path('scripts').glob('*.py')]"
+      - name: List scripts
+        run: python -c "import pathlib; [print(f) for f in pathlib.Path('scripts').glob('*.py')]"
 
   lint:
+    name: Extra Checks
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    - name: Check for common issues
-      run: |
-        python -c "import ast, pathlib; print('Checking Python files...'); files = list(pathlib.Path('scripts').glob('*.py')); print('Found ' + str(len(files)) + ' Python files')"
+      - name: Check for common issues
+        run: python -c "import ast, pathlib; files = list(pathlib.Path('scripts').glob('*.py')); [ast.parse(f.read_text(encoding='utf-8')) for f in files]; print('Found ' + str(len(files)) + ' Python files, all OK')"
 
-    - name: Verify file encoding
-      run: |
-        python -c "import pathlib; [pathlib.Path(f).read_text(encoding='utf-8') for f in pathlib.Path('.').glob('**/*.py')]"
+      - name: Verify file encoding
+        run: python -c "import pathlib; files = list(pathlib.Path('.').glob('**/*.py')); [f.read_text(encoding='utf-8') for f in files]; print(str(len(files)) + ' files readable as UTF-8')"

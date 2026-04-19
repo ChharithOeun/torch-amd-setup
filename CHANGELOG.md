@@ -14,10 +14,10 @@ and by GitHub Actions on every push to `main`.
 
 ---
 
-## [Unreleased] — updated 2026-03-29
+## [Unreleased] -- updated 2026-04-19
 
-### Changed
-- Add neon banner (`0e99f9c`)
+### Fixed
+- strip non-ASCII bytes from workflow YAML (GitHub parse error) (`d3d1c25`)
 
 
 ## [0.3.0] — 2026-03-23
